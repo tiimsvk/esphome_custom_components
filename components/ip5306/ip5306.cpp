@@ -215,7 +215,7 @@ void IP5306::write_register_bit(uint8_t reg, uint8_t mask, bool value) {
     ESP_LOGE(TAG, "Failed to write register 0x%02X with bit value", reg);
     return;
   }
-  
+
   ESP_LOGD(TAG, "Write register 0x%02X: 0x%02X", reg, current);
 }
 
@@ -233,7 +233,7 @@ void IP5306::write_register_bits(uint8_t reg, uint8_t mask, uint8_t shift, uint8
     ESP_LOGE(TAG, "Failed to write register 0x%02X with bits value", reg);
     return;
   }
-  
+
   ESP_LOGD(TAG, "Write register 0x%02X: 0x%02X", reg, current);
 }
 
@@ -242,7 +242,7 @@ void IP5306Switch::write_state(bool state) {
     ESP_LOGE(TAG, "Cannot write switch state: parent is null");
     return;
   }
-  
+
   if (this->type_ == IP5306_SWITCH_LOW_LOAD_SHUTDOWN) {
     this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x02, state);
   } else if (this->type_ == IP5306_SWITCH_CHARGER_ENABLE) {
@@ -258,7 +258,7 @@ void IP5306Select::control(const std::string &value) {
     ESP_LOGE(TAG, "Cannot control select: parent is null");
     return;
   }
-  
+
   uint8_t val = atoi(value.c_str());
 
   if (this->type_ == IP5306_SELECT_LOAD_SHUTDOWN_TIME) {

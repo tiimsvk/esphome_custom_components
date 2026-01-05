@@ -110,7 +110,8 @@ async def to_code(config):
     if CONF_CHARGE_CUTOFF_VOLTAGE in config:
         sel = await select.new_select(config[CONF_CHARGE_CUTOFF_VOLTAGE], options=[])
         cg.add(sel.set_parent(var))
-        cg.add(sel.traits.set_options(["4.2V", "4.3V", "4.35V", "4.4V"]))
+        # ZMENA: Bezpecnejsie napatia pre 4.2V baterie
+        cg.add(sel.traits.set_options(["4.14V", "4.17V", "4.185V", "4.20V"]))
         cg.add(var.set_charge_cutoff_voltage_select(sel))
 
     if CONF_CHARGE_TERMINATION_CURRENT in config:

@@ -16,6 +16,7 @@ static const uint8_t IP5306_REG_READ0 = 0x70;
 void IP5306::setup() {
   ESP_LOGCONFIG(TAG, "Setting up IP5306...");
 
+  // Switches
   if (this->low_load_shutdown_switch_ != nullptr) {
     uint8_t value;
     this->read_register(IP5306_REG_SYS_CTL0, &value, 1);
@@ -34,28 +35,85 @@ void IP5306::setup() {
     this->charge_control_switch_->publish_state(value & 0x10);
   }
 
+  // Load Shutdown Time (select)
   if (this->load_shutdown_time_select_ != nullptr) {
     this->load_shutdown_time_select_->traits.set_options({"8s", "32s", "16s", "64s"});
 
     uint8_t value;
     this->read_register(IP5306_REG_SYS_CTL2, &value, 1);
-    this->load_shutdown_time_select_->publish_state(std::to_string((value >> 2) & 0x03));
+    // Map value to string options
+    std::string option;
+    switch ((value >> 2) & 0x03) {
+      case 0x00:
+        option = "8s";
+        break;
+      case 0x01:
+        option = "32s";
+        break;
+      case 0x02:
+        option = "16s";
+        break;
+      case 0x03:
+        option = "64s";
+        break;
+      default:
+        option = "";  // Invalid value
+    }
+    this->load_shutdown_time_select_->publish_state(option);
   }
 
+  // Charge Cutoff Voltage (select)
   if (this->charge_cutoff_voltage_select_ != nullptr) {
     this->charge_cutoff_voltage_select_->traits.set_options({"4.2V", "4.3V", "4.35V", "4.4V"});
 
     uint8_t value;
     this->read_register(IP5306_REG_CHARGER_CTL1, &value, 1);
-    this->charge_cutoff_voltage_select_->publish_state(std::to_string(value & 0x03));
+    // Map value to string options
+    std::string option;
+    switch (value & 0x03) {
+      case 0x00:
+        option = "4.2V";
+        break;
+      case 0x01:
+        option = "4.3V";
+        break;
+      case 0x02:
+        option = "4.35V";
+        break;
+      case 0x03:
+        option = "4.4V";
+        break;
+      default:
+        option = "";  // Invalid value
+    }
+    this->charge_cutoff_voltage_select_->publish_state(option);
   }
 
+  // Charge Termination Current (select)
   if (this->charge_termination_current_select_ != nullptr) {
     this->charge_termination_current_select_->traits.set_options({"200mA", "400mA", "500mA", "600mA"});
 
     uint8_t value;
     this->read_register(IP5306_REG_CHARGER_CTL2, &value, 1);
-    this->charge_termination_current_select_->publish_state(std::to_string((value >> 2) & 0x03));
+    // Map value to string options
+    std::string option;
+    switch ((value >> 2) & 0x03) {
+      case 0x00:
+        option = "200mA";
+        break;
+      case 0x01:
+        option = "400mA";
+        break;
+      case 0x02:
+        option = "500mA";
+        break;
+      case 0x03:
+        option = "600mA";
+        break;
+      default:
+        option = "";  // Invalid value
+    }
+    this->charge_termination_current_select_->publish_state(option);
   }
 }
 

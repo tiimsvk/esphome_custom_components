@@ -169,7 +169,10 @@ void IP5306::update() {
 
 void IP5306::write_register_bit(uint8_t reg, uint8_t mask, bool value) {
   uint8_t current;
-  this->read_register(reg, &current, 1);
+  if (this->read_register(reg, &current, 1) != i2c::ERROR_OK) {
+    ESP_LOGE(TAG, "Failed to read register 0x%02X before writing!", reg);
+    return;
+  }
 
   if (value) {
     current |= mask;
@@ -177,39 +180,63 @@ void IP5306::write_register_bit(uint8_t reg, uint8_t mask, bool value) {
     current &= ~mask;
   }
 
-  this->write_register(reg, &current, 1);
+  if (this->write_register(reg, &current, 1) != i2c::ERROR_OK) {
+    ESP_LOGE(TAG, "Failed to write to register 0x%02X!", reg);
+  }
 }
 
 void IP5306::write_register_bits(uint8_t reg, uint8_t mask, uint8_t shift, uint8_t value) {
   uint8_t current;
-  this->read_register(reg, &current, 1);
+  if (this->read_register(reg, &current, 1) != i2c::ERROR_OK) {
+    ESP_LOGE(TAG, "Failed to read register 0x%02X before writing!", reg);
+    return;
+  }
 
   current &= ~mask;            // Clear target bits
-  current |= (value << shift); // Set new value
+  current |= (value << shift); // Set bits with new value
 
-  this->write_register(reg, &current, 1);
+  if (this->write_register(reg, &current, 1) != i2c::ERROR_OK) {
+    ESP_LOGE(TAG, "Failed to write to register 0x%02X!", reg);
+  }
 }
 
 void IP5306Switch::write_state(bool state) {
+  if (this->parent_ == nullptr) {
+    ESP_LOGE(TAG, "Parent is null for switch component!");
+    return;
+  }
+
+  ESP_LOGD(TAG, "Setting Switch '%s' to state %s", this->get_name().c_str(), state ? "ON" : "OFF");
+  
   if (this->type_ == IP5306_SWITCH_LOW_LOAD_SHUTDOWN) {
     this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x02, state);
   } else if (this->type_ == IP5306_SWITCH_CHARGER_ENABLE) {
     this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x10, state);
   } else if (this->type_ == IP5306_SWITCH_CHARGE_CONTROL) {
     this->parent_->write_register_bit(IP5306_REG_CHARGER_CTL0, 0x10, state);
+  } else {
+    ESP_LOGE(TAG, "Unknown Switch type!");
   }
   this->publish_state(state);
 }
 
 void IP5306Select::control(const std::string &value) {
-  uint8_t val = atoi(value.c_str());
+  if (this->parent_ == nullptr) {
+    ESP_LOGE(TAG, "Parent is null for select component!");
+    return;
+  }
+
+  int index = atoi(value.c_str());  // Ošetrenie výstupu
+  ESP_LOGD(TAG, "Setting Select '%s' to index %d", this->get_name().c_str(), index);
 
   if (this->type_ == IP5306_SELECT_LOAD_SHUTDOWN_TIME) {
-    this->parent_->write_register_bits(IP5306_REG_SYS_CTL2, 0x0C, 2, val);
+    this->parent_->write_register_bits(IP5306_REG_SYS_CTL2, 0x0C, 2, index);
   } else if (this->type_ == IP5306_SELECT_CHARGE_CUTOFF_VOLTAGE) {
-    this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL1, 0x03, 0, val);
+    this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL1, 0x03, 0, index);
   } else if (this->type_ == IP5306_SELECT_CHARGE_TERMINATION_CURRENT) {
-    this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL2, 0x0C, 2, val);
+    this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL2, 0x0C, 2, index);
+  } else {
+    ESP_LOGE(TAG, "Unknown Select type!");
   }
   this->publish_state(value);
 }

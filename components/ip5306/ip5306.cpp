@@ -199,11 +199,9 @@ void IP5306::update() {
 }  // <- Pridané ukončenie funkcie.
 
 void IP5306::shutdown() {
-  if (this->write_register_bit(IP5306_REG_SYS_CTL1, 0x08, false) == i2c::ERROR_OK) {
-    ESP_LOGD(TAG, "System shutdown command sent.");
-  } else {
-    ESP_LOGE(TAG, "Failed to send shutdown command.");
-  }
+  // Turn off boost and disable all outputs
+  this->write_register_bit(IP5306_REG_SYS_CTL1, 0x08, false);
+  ESP_LOGD(TAG, "System shutdown command sent.");
 }
 
 void IP5306::write_register_bit(uint8_t reg, uint8_t mask, bool value) {

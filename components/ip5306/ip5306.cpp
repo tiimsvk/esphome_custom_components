@@ -14,6 +14,7 @@ static const uint8_t IP5306_REG_CHARGER_CTL1 = 0x21;
 static const uint8_t IP5306_REG_CHARGER_CTL2 = 0x22;
 static const uint8_t IP5306_REG_READ0 = 0x70;
 static const uint8_t IP5306_REG_READ1 = 0x71;
+static const uint8_t IP5306_REG_LEVEL = 0x72;
 
 void IP5306::setup() {
   ESP_LOGCONFIG(TAG, "Setting up IP5306...");
@@ -284,15 +285,6 @@ void IP5306Select::control(const std::string &value) {
     ESP_LOGE(TAG, "Unknown Select type!");
   }
   this->publish_state(value);
-}
-
-void IP5306::shutdown() {
-  // Turn off boost and disable all outputs
-  if (this->write_register_bit(IP5306_REG_SYS_CTL1, 0x08, false) == i2c::ERROR_OK) {
-    ESP_LOGD(TAG, "IP5306 shutdown command sent.");
-  } else {
-    ESP_LOGE(TAG, "Failed to send shutdown command.");
-  }
 }
 
 float IP5306::get_setup_priority() const {

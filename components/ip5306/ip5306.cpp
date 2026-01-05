@@ -14,19 +14,22 @@ static const uint8_t IP5306_REG_CHARGER_CTL0 = 0x20;
 static const uint8_t IP5306_REG_CHARGER_CTL1 = 0x21;
 static const uint8_t IP5306_REG_CHARGER_CTL2 = 0x22;
 static const uint8_t IP5306_REG_READ0 = 0x70;
-static const uint8_t IP5306_REG_READ1 = 0x71; // Tu je len Charge Full flag, nie prud
+static const uint8_t IP5306_REG_READ1 = 0x71; // Status registe (flagy)
 static const uint8_t IP5306_REG_READ2 = 0x72;
 static const uint8_t IP5306_REG_LEVEL = 0x78;
 
 void IP5306::setup() {
   ESP_LOGCONFIG(TAG, "Setting up IP5306...");
+  
+  // Vynutenie Boost ON pri starte
+  this->write_register_bit(IP5306_REG_SYS_CTL0, 0x20, true);
 
+  // Nacitanie Switchov
   uint8_t sys0, sys1, chg0;
   bool sys0_ok = (this->read_register(IP5306_REG_SYS_CTL0, &sys0, 1) == i2c::ERROR_OK);
   bool sys1_ok = (this->read_register(IP5306_REG_SYS_CTL1, &sys1, 1) == i2c::ERROR_OK);
   bool chg0_ok = (this->read_register(IP5306_REG_CHARGER_CTL0, &chg0, 1) == i2c::ERROR_OK);
 
-  // Nacitanie stavov Switchov
   for (auto *sw : this->switches_) {
       switch (sw->get_type()) {
           case IP5306_SWITCH_LOW_LOAD_SHUTDOWN:
@@ -36,21 +39,12 @@ void IP5306::setup() {
               if (sys0_ok) sw->publish_state(sys0 & 0x10);
               break;
           case IP5306_SWITCH_BOOST_ENABLE:
-              // Ak je boost vypnuty pri starte, zapneme ho (aby bol always ON ako chces)
-              if (sys0_ok) {
-                  bool boost_is_on = sys0 & 0x20;
-                  sw->publish_state(boost_is_on);
-                  if (!boost_is_on) {
-                      ESP_LOGD(TAG, "Enabling Boost Control at setup...");
-                      this->write_register_bit(IP5306_REG_SYS_CTL0, 0x20, true);
-                      sw->publish_state(true);
-                  }
-              }
+              // Boost vzdy ON
+              sw->publish_state(true);
               break;
           case IP5306_SWITCH_CHARGE_CONTROL:
               if (chg0_ok) sw->publish_state(chg0 & 0x10);
               break;
-          
           case IP5306_SWITCH_LOW_BAT_SHUTDOWN:
               if (sys1_ok) sw->publish_state(sys1 & 0x01);
               break;
@@ -60,16 +54,14 @@ void IP5306::setup() {
           case IP5306_SWITCH_BUTTON_SHUTDOWN:
               if (sys1_ok) sw->publish_state(sys1 & 0x80);
               break;
-
           case IP5306_SWITCH_SOFTWARE_SHUTDOWN:
               sw->publish_state(false);
               break;
-          default:
-              break;
+          default: break;
       }
   }
 
-  // Nacitanie hodnot Selectov
+  // Nacitanie Selectov
   for (auto *sel : this->selects_) {
       uint8_t val = 0;
       int index = 0;
@@ -77,21 +69,28 @@ void IP5306::setup() {
       const auto &opts = sel->traits.get_options();
       if (opts.empty()) continue;
 
-      if (opts[0] == "8s") { 
+      if (opts[0] == "8s") { // LOAD_SHUTDOWN_TIME
           if (this->read_register(IP5306_REG_SYS_CTL2, &val, 1) == i2c::ERROR_OK) {
             index = (val >> 2) & 0x03;
             found = true;
           }
       } 
-      else if (opts[0] == "4.2V") { 
+      else if (opts[0] == "4.2V") { // CHARGE_CUTOFF_VOLTAGE
            if (this->read_register(IP5306_REG_CHARGER_CTL1, &val, 1) == i2c::ERROR_OK) {
              index = val & 0x03;
              found = true;
            }
       }
-      else if (opts[0] == "200mA") { 
+      else if (opts[0] == "200mA") { // CHARGE_TERMINATION_CURRENT
            if (this->read_register(IP5306_REG_CHARGER_CTL2, &val, 1) == i2c::ERROR_OK) {
              index = (val >> 2) & 0x03;
+             found = true;
+           }
+      }
+      else if (opts[0] == "0.05A") { // MAX_CHARGE_CURRENT (Novy)
+           // Bity 0-4 v registroch 0x20
+           if (this->read_register(IP5306_REG_CHARGER_CTL0, &val, 1) == i2c::ERROR_OK) {
+             index = val & 0x1F; // Prvych 5 bitov
              found = true;
            }
       }
@@ -105,6 +104,17 @@ void IP5306::setup() {
 void IP5306::update() {
   uint8_t read2_data;
   uint8_t read_level;
+  uint8_t sys0_check;
+
+  // --- KONTROLA A VYNUCOVANIE BOOST ON ---
+  if (this->read_register(IP5306_REG_SYS_CTL0, &sys0_check, 1) == i2c::ERROR_OK) {
+      if (!(sys0_check & 0x20)) {
+          // ESP_LOGW(TAG, "Boost bol vypnuty! Zapinam...");
+          this->write_register_bit(IP5306_REG_SYS_CTL0, 0x20, true);
+          if (this->boost_control_switch_ != nullptr)
+             this->boost_control_switch_->publish_state(true);
+      }
+  }
 
   // 1. Charger Status & Full
   uint8_t status_data[2];
@@ -118,6 +128,7 @@ void IP5306::update() {
               this->last_charger_connected_ = connected;
           }
       }
+      
       if (this->charge_full_ != nullptr) {
           if (this->last_charge_full_ != (int)full) {
               this->charge_full_->publish_state(full);
@@ -126,7 +137,15 @@ void IP5306::update() {
       }
   }
 
-  // 2. Load Status
+  // 2. Output Current - VYPNUTE
+  // IP5306 nepodporuje citanie prudu v Amperoch. Register 0x71 je stavovy (flagy).
+  // Ak tu nechame vypocet, bude to ukazovat nezmysly.
+  if (this->current_sensor_ != nullptr) {
+      // Mozeme poslat 0 alebo nic. Posielam 0 pre istotu.
+      // this->current_sensor_->publish_state(0.0);
+  }
+
+  // 3. Load Status
   if (this->load_status_sensor_ != nullptr) {
       if (this->read_register(IP5306_REG_READ2, &read2_data, 1) == i2c::ERROR_OK) {
           bool light_load_bit = (read2_data >> 2) & 0x01;
@@ -139,7 +158,7 @@ void IP5306::update() {
       }
   }
 
-  // 3. Battery Level - DEBOUNCE
+  // 4. Battery Level - S MASIVNYM DEBOUNCINGOM
   if (this->battery_level_ != nullptr) {
     if (this->read_register(IP5306_REG_LEVEL, &read_level, 1) == i2c::ERROR_OK) {
       float raw_value = 0;
@@ -153,7 +172,8 @@ void IP5306::update() {
 
       if (raw_value == this->last_battery_level_) {
            this->battery_debounce_counter_ = 0;
-      } else {
+      } 
+      else {
           if (raw_value == this->pending_battery_level_) {
               this->battery_debounce_counter_++;
           } else {
@@ -161,10 +181,10 @@ void IP5306::update() {
               this->battery_debounce_counter_ = 0;
           }
 
-          if (this->battery_debounce_counter_ >= 30) {
+          if (this->battery_debounce_counter_ >= 50) {
               this->battery_level_->publish_state(raw_value);
               this->last_battery_level_ = raw_value;
-              this->battery_debounce_counter_ = 0;
+              this->battery_debounce_counter_ = 0; 
           }
       }
     }
@@ -193,19 +213,27 @@ void IP5306Switch::write_state(bool state) {
   uint8_t mask = 0;
 
   switch (this->type_) {
-    case IP5306_SWITCH_BOOST_ENABLE:      reg = IP5306_REG_SYS_CTL0; mask = 0x20; break;
+    case IP5306_SWITCH_BOOST_ENABLE:      
+        reg = IP5306_REG_SYS_CTL0; 
+        mask = 0x20; 
+        state = true; // Vynutene ON
+        break;
+
     case IP5306_SWITCH_LOW_LOAD_SHUTDOWN: reg = IP5306_REG_SYS_CTL0; mask = 0x02; break;
     case IP5306_SWITCH_CHARGER_ENABLE:    reg = IP5306_REG_SYS_CTL0; mask = 0x10; break;
     case IP5306_SWITCH_CHARGE_CONTROL:    reg = IP5306_REG_CHARGER_CTL0; mask = 0x10; break;
+    
     case IP5306_SWITCH_LOW_BAT_SHUTDOWN:  reg = IP5306_REG_SYS_CTL1; mask = 0x01; break;
     case IP5306_SWITCH_BOOST_ON_LOAD:     reg = IP5306_REG_SYS_CTL1; mask = 0x04; break;
     case IP5306_SWITCH_BUTTON_SHUTDOWN:   reg = IP5306_REG_SYS_CTL1; mask = 0x80; break;
+    
     case IP5306_SWITCH_SOFTWARE_SHUTDOWN:
        if (state) {
            this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x20, false); 
            this->publish_state(false);
        }
        return;
+
     default: return;
   }
 
@@ -230,6 +258,10 @@ void IP5306Select::control(const std::string &value) {
        break;
     case IP5306_SELECT_CHARGE_TERMINATION_CURRENT:
        this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL2, 0x0C, 2, index);
+       break;
+    case IP5306_SELECT_MAX_CHARGE_CURRENT: // Novy ovladac prudu
+       // Bity 0-4 v registroch 0x20
+       this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL0, 0x1F, 0, index);
        break;
   }
   this->publish_state(value);

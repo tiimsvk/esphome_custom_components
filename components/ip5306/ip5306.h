@@ -13,7 +13,7 @@ namespace ip5306 {
 enum IP5306SwitchType {
   IP5306_SWITCH_LOW_LOAD_SHUTDOWN,
   IP5306_SWITCH_CHARGER_ENABLE,
-  IP5306_SWITCH_CHARGE_CONTROL,  // NEW: Charge control
+  IP5306_SWITCH_CHARGE_CONTROL,
 };
 
 enum IP5306SelectType {
@@ -49,6 +49,10 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
 
   float get_setup_priority() const override;
 
+  void set_battery_level(sensor::Sensor *sensor) { this->battery_level_ = sensor; }
+  void set_charger_connected(binary_sensor::BinarySensor *sensor) { this->charger_connected_ = sensor; }
+  void set_charge_full(binary_sensor::BinarySensor *sensor) { this->charge_full_ = sensor; }
+
   void set_low_load_shutdown_switch(IP5306Switch *low_load_shutdown) {
     this->low_load_shutdown_switch_ = low_load_shutdown;
   }
@@ -68,11 +72,13 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
     this->charge_termination_current_select_ = charge_termination_current;
   }
 
-  // Helper methods
   void write_register_bit(uint8_t reg, uint8_t mask, bool value);
   void write_register_bits(uint8_t reg, uint8_t mask, uint8_t shift, uint8_t value);
 
  private:
+  sensor::Sensor *battery_level_{nullptr};
+  binary_sensor::BinarySensor *charger_connected_{nullptr};
+  binary_sensor::BinarySensor *charge_full_{nullptr};
   IP5306Switch *low_load_shutdown_switch_{nullptr};
   IP5306Switch *charger_enable_switch_{nullptr};
   IP5306Switch *charge_control_switch_{nullptr};

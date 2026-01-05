@@ -14,6 +14,7 @@ enum IP5306SwitchType {
   IP5306_SWITCH_LOW_LOAD_SHUTDOWN,
   IP5306_SWITCH_CHARGER_ENABLE,
   IP5306_SWITCH_CHARGE_CONTROL,
+  IP5306_SWITCH_BOOST_ENABLE,  // Nové: Poradí sa pre boost control
 };
 
 enum IP5306SelectType {
@@ -62,6 +63,11 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
   void set_charge_control_switch(IP5306Switch *charge_control) {
     this->charge_control_switch_ = charge_control;
   }
+  void set_boost_control_switch(IP5306Switch *boost_enable) {  // Nastavenie boost_control
+    this->boost_control_switch_ = boost_enable;
+  }
+  void set_voltage_sensor(sensor::Sensor *voltage_sensor) { this->voltage_sensor_ = voltage_sensor; }  // Voltage Sensor
+  void set_current_sensor(sensor::Sensor *current_sensor) { this->current_sensor_ = current_sensor; }  // Current Sensor
   void set_load_shutdown_time_select(IP5306Select *load_shutdown_time) {
     this->load_shutdown_time_select_ = load_shutdown_time;
   }
@@ -82,6 +88,7 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
   IP5306Switch *low_load_shutdown_switch_{nullptr};
   IP5306Switch *charger_enable_switch_{nullptr};
   IP5306Switch *charge_control_switch_{nullptr};
+  IP5306Switch *boost_control_switch_{nullptr};  // Verzovanie Boost Control
   IP5306Select *load_shutdown_time_select_{nullptr};
   IP5306Select *charge_cutoff_voltage_select_{nullptr};
   IP5306Select *charge_termination_current_select_{nullptr};

@@ -20,7 +20,6 @@ CONF_CHARGER_CONTROL = "charger_control"
 CONF_LOAD_SHUTDOWN_TIME = "load_shutdown_time"
 CONF_CHARGE_CUTOFF_VOLTAGE = "charge_cutoff_voltage"
 CONF_CHARGE_TERMINATION_CURRENT = "charge_termination_current"
-CONF_CURRENT = "current"
 CONF_BOOST_CONTROL = "boost_control"
 CONF_SOFTWARE_SHUTDOWN = "software_shutdown"
 CONF_LOAD_STATUS = "load_status" # Novy textovy senzor
@@ -34,11 +33,6 @@ CONFIG_SCHEMA = cv.COMPONENT_SCHEMA.extend(
             unit_of_measurement=UNIT_PERCENT,
             device_class=DEVICE_CLASS_BATTERY,
             accuracy_decimals=0,
-        ),
-        cv.Optional(CONF_CURRENT): sensor.sensor_schema(
-            unit_of_measurement=UNIT_AMPERE,
-            device_class=DEVICE_CLASS_CURRENT,
-            accuracy_decimals=2,
         ),
         
         # Novy textovy senzor
@@ -70,10 +64,6 @@ async def to_code(config):
     if CONF_BATTERY_LEVEL in config:
         sens = await sensor.new_sensor(config[CONF_BATTERY_LEVEL])
         cg.add(var.set_battery_level(sens))
-
-    if CONF_CURRENT in config:
-        sens = await sensor.new_sensor(config[CONF_CURRENT])
-        cg.add(var.set_current_sensor(sens))
 
     if CONF_LOAD_STATUS in config:
         sens = await text_sensor.new_text_sensor(config[CONF_LOAD_STATUS])

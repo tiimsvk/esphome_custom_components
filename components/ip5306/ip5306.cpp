@@ -40,6 +40,12 @@ void IP5306::setup() {
     this->charge_control_switch_->publish_state(value & 0x10);
   }
 
+  if (this->boost_control_switch_ != nullptr) {
+    uint8_t value;
+    this->read_register(IP5306_REG_SYS_CTL0, &value, 1);
+    this->boost_control_switch_->publish_state(value & 0x01);  // Boost enabled/disabled
+  }
+
   // Load Shutdown Time (select)
   if (this->load_shutdown_time_select_ != nullptr) {
     this->load_shutdown_time_select_->traits.set_options({"8s", "32s", "16s", "64s"});

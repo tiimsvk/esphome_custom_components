@@ -82,6 +82,8 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
   void write_register_bits(uint8_t reg, uint8_t mask, uint8_t shift, uint8_t value);
 
  private:
+  sensor::Sensor *voltage_sensor_{nullptr};
+  sensor::Sensor *current_sensor_{nullptr};
   sensor::Sensor *battery_level_{nullptr};
   binary_sensor::BinarySensor *charger_connected_{nullptr};
   binary_sensor::BinarySensor *charge_full_{nullptr};

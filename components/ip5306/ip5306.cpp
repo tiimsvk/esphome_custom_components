@@ -6,16 +6,16 @@ namespace ip5306 {
 
 static const char *const TAG = "ip5306";
 
-static const uint8_t IP5306_REG_SYS_CTL0 = 0x00;        // System control register
-static const uint8_t IP5306_REG_SYS_CTL2 = 0x02;        // Load shutdown time register
-static const uint8_t IP5306_REG_CHARGER_CTL0 = 0x20;    // Charger control register
-static const uint8_t IP5306_REG_CHARGER_CTL1 = 0x21;    // Charge cutoff voltage register
-static const uint8_t IP5306_REG_CHARGER_CTL2 = 0x22;    // Charge termination current register
+static const uint8_t IP5306_REG_SYS_CTL0 = 0x00;
+static const uint8_t IP5306_REG_SYS_CTL2 = 0x02;
+static const uint8_t IP5306_REG_CHARGER_CTL0 = 0x20;
+static const uint8_t IP5306_REG_CHARGER_CTL1 = 0x21;
+static const uint8_t IP5306_REG_CHARGER_CTL2 = 0x22;
+static const uint8_t IP5306_REG_READ0 = 0x70;
 
 void IP5306::setup() {
   ESP_LOGCONFIG(TAG, "Setting up IP5306...");
 
-  // Initialize switches
   if (this->low_load_shutdown_switch_ != nullptr) {
     uint8_t value;
     this->read_register(IP5306_REG_SYS_CTL0, &value, 1);
@@ -34,7 +34,6 @@ void IP5306::setup() {
     this->charge_control_switch_->publish_state(value & 0x10);
   }
 
-  // Initialize selects
   if (this->load_shutdown_time_select_ != nullptr) {
     this->load_shutdown_time_select_->traits.set_options({"8s", "32s", "16s", "64s"});
 
@@ -61,7 +60,16 @@ void IP5306::setup() {
 }
 
 void IP5306::update() {
-  // Refresh states if needed
+  uint8_t data[2];
+  if (this->read_register(IP5306_REG_READ0, data, 1) == i2c::ERROR_OK) {
+    if (this->charger_connected_ != nullptr) {
+      this->charger_connected_->publish_state(data[0] & 0x08);
+    }
+
+    if (this->charge_full_ != nullptr) {
+      this->charge_full_->publish_state(data[0] & 0x10);
+    }
+  }
 }
 
 void IP5306::write_register_bit(uint8_t reg, uint8_t mask, bool value) {

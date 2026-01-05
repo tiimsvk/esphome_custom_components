@@ -14,7 +14,9 @@ static const uint8_t IP5306_REG_CHARGER_CTL1 = 0x21;
 static const uint8_t IP5306_REG_CHARGER_CTL2 = 0x22;
 static const uint8_t IP5306_REG_READ0 = 0x70;
 static const uint8_t IP5306_REG_READ1 = 0x71;
-static const uint8_t IP5306_REG_LEVEL = 0x72;
+//static const uint8_t IP5306_REG_LEVEL = 0x72; //load current
+ton//static const uint8_t IP5306_REG_READ_3   0x77; //button
+static const uint8_t IP5306_REG_LEVEL = 0x78;
 
 void IP5306::setup() {
   ESP_LOGCONFIG(TAG, "Setting up IP5306...");

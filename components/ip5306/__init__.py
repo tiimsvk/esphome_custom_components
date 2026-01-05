@@ -8,6 +8,8 @@ IP5306 = ip5306_ns.class_('IP5306', i2c.I2CDevice, cg.Component)
 IP5306Switch = ip5306_ns.class_('IP5306Switch', switch.Switch, cg.Component)
 IP5306Select = ip5306_ns.class_('IP5306Select', select.Select, cg.Component)
 
+AUTO_LOAD = ["binary_sensor", "sensor", "switch", "select"]
+
 CONF_CHARGER_CONNECTED = "charger_connected"  # NEW: Nabíjačka pripojená
 CONF_CHARGE_FULL = "charge_full"  # NEW: Nabíjanie dokončené
 

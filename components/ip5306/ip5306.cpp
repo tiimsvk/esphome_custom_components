@@ -7,15 +7,19 @@ namespace ip5306 {
 static const char *const TAG = "ip5306";
 
 static const uint8_t IP5306_REG_SYS_CTL0 = 0x00;
+static const uint8_t IP5306_REG_SYS_CTL1 = 0x01;
 static const uint8_t IP5306_REG_SYS_CTL2 = 0x02;
 static const uint8_t IP5306_REG_CHARGER_CTL0 = 0x20;
 static const uint8_t IP5306_REG_CHARGER_CTL1 = 0x21;
 static const uint8_t IP5306_REG_CHARGER_CTL2 = 0x22;
 static const uint8_t IP5306_REG_READ0 = 0x70;
-static const uint8_t IP5306_REG_LEVEL = 0x78;
+static const uint8_t IP5306_REG_READ1 = 0x71;
 
 void IP5306::setup() {
   ESP_LOGCONFIG(TAG, "Setting up IP5306...");
+  
+  // Configure charge cutoff voltage (default: 4.2V)
+  this->write_register_bits(IP5306_REG_CHARGER_CTL1, 0x03, 0, 0x00);  // Default to 4.2V
 
   // Switches
   if (this->low_load_shutdown_switch_ != nullptr) {
@@ -163,6 +167,25 @@ void IP5306::update() {
       }
     } else {
       ESP_LOGE(TAG, "Failed to read battery level.");
+  // Read battery voltage and publish state
+  if (this->voltage_sensor_ != nullptr) {
+    uint8_t data_volt[1];
+    if (this->read_register(IP5306_REG_READ0, data_volt, 1) == i2c::ERROR_OK) {
+      float voltage = (data_volt[0] & 0x7F) * 0.05;  // Voltage in volts
+      this->voltage_sensor_->publish_state(voltage);
+    } else {
+      ESP_LOGE(TAG, "Failed to read battery voltage.");
+    }
+  }
+
+  // Read output current and publish state
+  if (this->current_sensor_ != nullptr) {
+    uint8_t data_curr[1];
+    if (this->read_register(IP5306_REG_READ1, data_curr, 1) == i2c::ERROR_OK) {
+      float current = (data_curr[0] & 0x7F) * 0.02;  // Current in amps
+      this->current_sensor_->publish_state(current);
+    } else {
+      ESP_LOGE(TAG, "Failed to read output current.");
     }
   }
 }
@@ -243,8 +266,17 @@ void IP5306Select::control(const std::string &value) {
   this->publish_state(value);
 }
 
+void IP5306::shutdown() {
+  // Turn off boost and disable all outputs
+  if (this->write_register_bit(IP5306_REG_SYS_CTL1, 0x08, false) == i2c::ERROR_OK) {
+    ESP_LOGD(TAG, "IP5306 shutdown command sent.");
+  } else {
+    ESP_LOGE(TAG, "Failed to send shutdown command.");
+  }
+}
+
 float IP5306::get_setup_priority() const {
-  return setup_priority::HARDWARE;  // Nastavte prioritu na "HARDWARE" pre hardvérové komponenty
+  return setup_priority::HARDWARE;
 }
 
 }  // namespace ip5306

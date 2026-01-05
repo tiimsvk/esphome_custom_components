@@ -50,7 +50,7 @@ CONFIG_SCHEMA = cv.COMPONENT_SCHEMA.extend(
         cv.Optional(CONF_LOW_LOAD_SHUTDOWN): switch.switch_schema(IP5306Switch),
         cv.Optional(CONF_CHARGER_ENABLE): switch.switch_schema(IP5306Switch),
         cv.Optional(CONF_CHARGER_CONTROL): switch.switch_schema(IP5306Switch),
-        cv.Optional(CONF_BOOST_CONTROL): switch.switch_schema(),
+        cv.Optional(CONF_BOOST_CONTROL): switch.switch_schema(IP5306Switch),
         # Select - Nastavenia
         cv.Optional(CONF_LOAD_SHUTDOWN_TIME): select.select_schema(IP5306Select),
         cv.Optional(CONF_CHARGE_CUTOFF_VOLTAGE): select.select_schema(IP5306Select),
@@ -95,6 +95,7 @@ async def to_code(config):
 
     if CONF_BOOST_CONTROL in config:
         sw = await switch.new_switch(config[CONF_BOOST_CONTROL])
+        cg.add(sw.set_parent(var))
         cg.add(var.set_boost_control_switch(sw))
 
     # Selecty

@@ -14,58 +14,66 @@ static const uint8_t IP5306_REG_CHARGER_CTL0 = 0x20;
 static const uint8_t IP5306_REG_CHARGER_CTL1 = 0x21;
 static const uint8_t IP5306_REG_CHARGER_CTL2 = 0x22;
 static const uint8_t IP5306_REG_READ0 = 0x70;
-static const uint8_t IP5306_REG_READ1 = 0x71;
+static const uint8_t IP5306_REG_READ1 = 0x71; // Tu je len Charge Full flag, nie prud
 static const uint8_t IP5306_REG_READ2 = 0x72;
 static const uint8_t IP5306_REG_LEVEL = 0x78;
 
 void IP5306::setup() {
   ESP_LOGCONFIG(TAG, "Setting up IP5306...");
-  
-  // --- VYNUCOVANIE BOOST ON PRI STARTE ---
-  // Register 0x00, Bit 5 (0x20) musi byt 1
-  this->write_register_bit(IP5306_REG_SYS_CTL0, 0x20, true);
 
-  // Nacitanie a nastavenie Switchov (aktualny stav z cipu)
   uint8_t sys0, sys1, chg0;
-  
-  if (this->read_register(IP5306_REG_SYS_CTL0, &sys0, 1) == i2c::ERROR_OK) {
-      // Prejdeme vsetky switche a aktualizujeme ich stav podla registra
-      for (auto *sw : this->switches_) {
-          // Musime zistit typ switchu (hack - predpokladame podla poradia alebo mena, 
-          // ale kedze nemame getter na typ, musime to spravit priamo v setupe podla logiky write_state)
-          // Tu je to zjednodusene - idealne by Switch mal metodu update_state(reg_value)
+  bool sys0_ok = (this->read_register(IP5306_REG_SYS_CTL0, &sys0, 1) == i2c::ERROR_OK);
+  bool sys1_ok = (this->read_register(IP5306_REG_SYS_CTL1, &sys1, 1) == i2c::ERROR_OK);
+  bool chg0_ok = (this->read_register(IP5306_REG_CHARGER_CTL0, &chg0, 1) == i2c::ERROR_OK);
+
+  // Nacitanie stavov Switchov
+  for (auto *sw : this->switches_) {
+      switch (sw->get_type()) {
+          case IP5306_SWITCH_LOW_LOAD_SHUTDOWN:
+              if (sys0_ok) sw->publish_state(sys0 & 0x02);
+              break;
+          case IP5306_SWITCH_CHARGER_ENABLE:
+              if (sys0_ok) sw->publish_state(sys0 & 0x10);
+              break;
+          case IP5306_SWITCH_BOOST_ENABLE:
+              // Ak je boost vypnuty pri starte, zapneme ho (aby bol always ON ako chces)
+              if (sys0_ok) {
+                  bool boost_is_on = sys0 & 0x20;
+                  sw->publish_state(boost_is_on);
+                  if (!boost_is_on) {
+                      ESP_LOGD(TAG, "Enabling Boost Control at setup...");
+                      this->write_register_bit(IP5306_REG_SYS_CTL0, 0x20, true);
+                      sw->publish_state(true);
+                  }
+              }
+              break;
+          case IP5306_SWITCH_CHARGE_CONTROL:
+              if (chg0_ok) sw->publish_state(chg0 & 0x10);
+              break;
+          
+          case IP5306_SWITCH_LOW_BAT_SHUTDOWN:
+              if (sys1_ok) sw->publish_state(sys1 & 0x01);
+              break;
+          case IP5306_SWITCH_BOOST_ON_LOAD:
+              if (sys1_ok) sw->publish_state(sys1 & 0x04);
+              break;
+          case IP5306_SWITCH_BUTTON_SHUTDOWN:
+              if (sys1_ok) sw->publish_state(sys1 & 0x80);
+              break;
+
+          case IP5306_SWITCH_SOFTWARE_SHUTDOWN:
+              sw->publish_state(false);
+              break;
+          default:
+              break;
       }
-      
-      // Kedze nemame priamy pristup k type_ v poli, spravime to manualne pre zname pointery:
-      if (this->low_load_shutdown_switch_ != nullptr)
-        this->low_load_shutdown_switch_->publish_state(sys0 & 0x02);
-      if (this->charger_enable_switch_ != nullptr)
-        this->charger_enable_switch_->publish_state(sys0 & 0x10);
-      
-      // Boost switch vzdy publikujeme ako ON
-      if (this->boost_control_switch_ != nullptr)
-        this->boost_control_switch_->publish_state(true); 
   }
 
-  if (this->read_register(IP5306_REG_CHARGER_CTL0, &chg0, 1) == i2c::ERROR_OK) {
-      if (this->charge_control_switch_ != nullptr)
-        this->charge_control_switch_->publish_state(chg0 & 0x10);
-  }
-
-  // Ostatne switche su v SYS_CTL1
-  if (this->read_register(IP5306_REG_SYS_CTL1, &sys1, 1) == i2c::ERROR_OK) {
-       // Tu by sme mohli nastavit dalsie switche ak by sme k nim mali pointery (napr. low_bat_shutdown)
-  }
-
-  if (this->software_shutdown_switch_ != nullptr)
-     this->software_shutdown_switch_->publish_state(false);
-
-  // Nacitanie pociatocnych hodnot Selectov
+  // Nacitanie hodnot Selectov
   for (auto *sel : this->selects_) {
       uint8_t val = 0;
       int index = 0;
       bool found = false;
-      
       const auto &opts = sel->traits.get_options();
       if (opts.empty()) continue;
 
@@ -95,23 +103,10 @@ void IP5306::setup() {
 }
 
 void IP5306::update() {
-  uint8_t read1_data;
   uint8_t read2_data;
   uint8_t read_level;
-  uint8_t sys0_check;
 
-  // --- KONTROLA A VYNUCOVANIE BOOST ON ---
-  // Kazdy cyklus skontrolujeme, ci je Boost zapnuty. Ak nie, zapneme ho.
-  if (this->read_register(IP5306_REG_SYS_CTL0, &sys0_check, 1) == i2c::ERROR_OK) {
-      if (!(sys0_check & 0x20)) {
-          ESP_LOGW(TAG, "Boost was OFF! Forcing ON...");
-          this->write_register_bit(IP5306_REG_SYS_CTL0, 0x20, true);
-          if (this->boost_control_switch_ != nullptr)
-             this->boost_control_switch_->publish_state(true);
-      }
-  }
-
-  // 1. Charger Status
+  // 1. Charger Status & Full
   uint8_t status_data[2];
   if (this->read_register(IP5306_REG_READ0, status_data, 2) == i2c::ERROR_OK) {
       bool connected = status_data[0] & 0x08; 
@@ -123,7 +118,6 @@ void IP5306::update() {
               this->last_charger_connected_ = connected;
           }
       }
-      
       if (this->charge_full_ != nullptr) {
           if (this->last_charge_full_ != (int)full) {
               this->charge_full_->publish_state(full);
@@ -132,32 +126,7 @@ void IP5306::update() {
       }
   }
 
-  // 2. Output Current - S DEBOUNCINGOM
-  if (this->current_sensor_ != nullptr) {
-    if (this->read_register(IP5306_REG_READ1, &read1_data, 1) == i2c::ERROR_OK) {
-        float current = (float)read1_data * 0.02f;
-        
-        // Debounce logika pre prud
-        if (std::abs(current - this->pending_current_) < 0.005) { // Ak je zmena mala, povazujeme za stabilne
-             this->current_debounce_counter_++;
-        } else {
-             this->pending_current_ = current;
-             this->current_debounce_counter_ = 0;
-        }
-
-        // Ak je hodnota stabilna 10 cyklov
-        if (this->current_debounce_counter_ >= 10) {
-            // Publikujeme len ak sa lisi od poslednej znamej
-            if (std::abs(current - this->last_current_) > 0.005) {
-                this->current_sensor_->publish_state(current);
-                this->last_current_ = current;
-            }
-            this->current_debounce_counter_ = 0;
-        }
-    }
-  }
-
-  // 3. Load Status
+  // 2. Load Status
   if (this->load_status_sensor_ != nullptr) {
       if (this->read_register(IP5306_REG_READ2, &read2_data, 1) == i2c::ERROR_OK) {
           bool light_load_bit = (read2_data >> 2) & 0x01;
@@ -170,7 +139,7 @@ void IP5306::update() {
       }
   }
 
-  // 4. Battery Level - S MASIVNYM DEBOUNCINGOM
+  // 3. Battery Level - DEBOUNCE
   if (this->battery_level_ != nullptr) {
     if (this->read_register(IP5306_REG_LEVEL, &read_level, 1) == i2c::ERROR_OK) {
       float raw_value = 0;
@@ -184,8 +153,7 @@ void IP5306::update() {
 
       if (raw_value == this->last_battery_level_) {
            this->battery_debounce_counter_ = 0;
-      } 
-      else {
+      } else {
           if (raw_value == this->pending_battery_level_) {
               this->battery_debounce_counter_++;
           } else {
@@ -193,11 +161,10 @@ void IP5306::update() {
               this->battery_debounce_counter_ = 0;
           }
 
-          // Zvysene na 50 cyklov pre maximalnu stabilitu
-          if (this->battery_debounce_counter_ >= 50) {
+          if (this->battery_debounce_counter_ >= 30) {
               this->battery_level_->publish_state(raw_value);
               this->last_battery_level_ = raw_value;
-              this->battery_debounce_counter_ = 0; 
+              this->battery_debounce_counter_ = 0;
           }
       }
     }
@@ -226,31 +193,19 @@ void IP5306Switch::write_state(bool state) {
   uint8_t mask = 0;
 
   switch (this->type_) {
-    // Uprava: BOOST sa vzdy zapne, ignorujeme poziadavku na vypnutie
-    case IP5306_SWITCH_BOOST_ENABLE:      
-        reg = IP5306_REG_SYS_CTL0; 
-        mask = 0x20; 
-        state = true; // Vynutene ON
-        break;
-
+    case IP5306_SWITCH_BOOST_ENABLE:      reg = IP5306_REG_SYS_CTL0; mask = 0x20; break;
     case IP5306_SWITCH_LOW_LOAD_SHUTDOWN: reg = IP5306_REG_SYS_CTL0; mask = 0x02; break;
     case IP5306_SWITCH_CHARGER_ENABLE:    reg = IP5306_REG_SYS_CTL0; mask = 0x10; break;
     case IP5306_SWITCH_CHARGE_CONTROL:    reg = IP5306_REG_CHARGER_CTL0; mask = 0x10; break;
-    
     case IP5306_SWITCH_LOW_BAT_SHUTDOWN:  reg = IP5306_REG_SYS_CTL1; mask = 0x01; break;
     case IP5306_SWITCH_BOOST_ON_LOAD:     reg = IP5306_REG_SYS_CTL1; mask = 0x04; break;
     case IP5306_SWITCH_BUTTON_SHUTDOWN:   reg = IP5306_REG_SYS_CTL1; mask = 0x80; break;
-    
     case IP5306_SWITCH_SOFTWARE_SHUTDOWN:
        if (state) {
-           // Tlacidlo na vypnutie teraz ignorujeme alebo len resetneme switch
-           // Ak chces aby software shutdown naozaj vypol zariadenie, nechaj to takto.
-           // Ak chces aby to NIKDY neslo vypnut, zakomentuj riadok s write_register_bit
            this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x20, false); 
            this->publish_state(false);
        }
        return;
-
     default: return;
   }
 

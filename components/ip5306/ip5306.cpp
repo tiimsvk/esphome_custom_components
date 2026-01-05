@@ -196,6 +196,14 @@ void IP5306::update() {
   }
 }
 
+void IP5306::shutdown() {
+  if (this->write_register_bit(IP5306_REG_SYS_CTL1, 0x08, false) == i2c::ERROR_OK) {
+    ESP_LOGD(TAG, "System shutdown command sent.");
+  } else {
+    ESP_LOGE(TAG, "Failed to send shutdown command.");
+  }
+}
+
 void IP5306::write_register_bit(uint8_t reg, uint8_t mask, bool value) {
   uint8_t current;
   if (this->read_register(reg, &current, 1) != i2c::ERROR_OK) {
@@ -230,23 +238,29 @@ void IP5306::write_register_bits(uint8_t reg, uint8_t mask, uint8_t shift, uint8
 }
 
 void IP5306Switch::write_state(bool state) {
-  ESP_LOGD(TAG, "Parent is %snull for %s.", this->parent_ == nullptr ? "" : "not ", this->get_name().c_str());
   if (this->parent_ == nullptr) {
-    ESP_LOGE(TAG, "Parent is null for switch component!");
+    ESP_LOGE(TAG, "Parent component is null! Failed to set state.");
     return;
   }
 
-  ESP_LOGD(TAG, "Setting Switch '%s' to state %s", this->get_name().c_str(), state ? "ON" : "OFF");
-  
-  if (this->type_ == IP5306_SWITCH_LOW_LOAD_SHUTDOWN) {
-    this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x02, state);
-  } else if (this->type_ == IP5306_SWITCH_CHARGER_ENABLE) {
-    this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x10, state);
-  } else if (this->type_ == IP5306_SWITCH_CHARGE_CONTROL) {
-    this->parent_->write_register_bit(IP5306_REG_CHARGER_CTL0, 0x10, state);
-  } else {
-    ESP_LOGE(TAG, "Unknown Switch type!");
+  switch (this->type_) {
+    case IP5306_SWITCH_LOW_LOAD_SHUTDOWN:
+      this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x02, state);
+      break;
+    case IP5306_SWITCH_CHARGER_ENABLE:
+      this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x10, state);
+      break;
+    case IP5306_SWITCH_CHARGE_CONTROL:
+      this->parent_->write_register_bit(IP5306_REG_CHARGER_CTL0, 0x10, state);
+      break;
+    case IP5306_SWITCH_BOOST_ENABLE:
+      this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x01, state);
+      break;
+    default:
+      ESP_LOGE(TAG, "Unknown switch type.");
+      return;
   }
+
   this->publish_state(state);
 }
 

@@ -148,7 +148,6 @@ void IP5306::update() {
   if (this->battery_level_ != nullptr) {
     if (this->read_register(IP5306_REG_LEVEL, data_battery, 1) == i2c::ERROR_OK) {
       float value = 0;
-      // Mapovanie batériovej úrovne
       switch (data_battery[0] & 0xF0) {
         case 0xE0:
           value = 25;  // 25%
@@ -167,14 +166,15 @@ void IP5306::update() {
           ESP_LOGW(TAG, "Unknown battery level value: 0x%02X", data_battery[0]);
       }
 
-      // Publikuj iba v prípade, že sa hodnota zmenila
       if (this->last_battery_level_ != value) {
         this->last_battery_level_ = value;
         this->battery_level_->publish_state(value);
       }
     } else {
       ESP_LOGE(TAG, "Failed to read battery level.");
-    }  
+    }
+  }
+
   // Read battery voltage and publish state
   if (this->voltage_sensor_ != nullptr) {
     uint8_t data_volt[1];
@@ -196,7 +196,7 @@ void IP5306::update() {
       ESP_LOGE(TAG, "Failed to read output current.");
     }
   }
-}
+}  // <- Pridané ukončenie funkcie.
 
 void IP5306::shutdown() {
   if (this->write_register_bit(IP5306_REG_SYS_CTL1, 0x08, false) == i2c::ERROR_OK) {

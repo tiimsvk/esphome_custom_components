@@ -78,6 +78,7 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
     this->charge_termination_current_select_ = charge_termination_current;
   }
 
+  void set_software_shutdown_switch(IP5306Switch *software_shutdown);
   void shutdown();
 
   void write_register_bit(uint8_t reg, uint8_t mask, bool value);
@@ -96,6 +97,7 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
   IP5306Select *load_shutdown_time_select_{nullptr};
   IP5306Select *charge_cutoff_voltage_select_{nullptr};
   IP5306Select *charge_termination_current_select_{nullptr};
+  IP5306Switch *software_shutdown_switch_{nullptr};
   float last_battery_level_{-1};
 };
 

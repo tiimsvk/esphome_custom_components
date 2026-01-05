@@ -23,6 +23,7 @@ CONF_CHARGE_TERMINATION_CURRENT = "charge_termination_current"
 CONF_VOLTAGE = "voltage"
 CONF_CURRENT = "current"
 CONF_BOOST_CONTROL = "boost_control"
+CONF_SOFTWARE_SHUTDOWN = "software_shutdown"  # Pridanie software_shutdown
 
 CONFIG_SCHEMA = cv.COMPONENT_SCHEMA.extend(
     {
@@ -51,6 +52,7 @@ CONFIG_SCHEMA = cv.COMPONENT_SCHEMA.extend(
         cv.Optional(CONF_CHARGER_ENABLE): switch.switch_schema(IP5306Switch),
         cv.Optional(CONF_CHARGER_CONTROL): switch.switch_schema(IP5306Switch),
         cv.Optional(CONF_BOOST_CONTROL): switch.switch_schema(IP5306Switch),
+        cv.Optional(CONF_SOFTWARE_SHUTDOWN): switch.switch_schema(IP5306Switch),  # Nová možnosť
         # Select - Nastavenia
         cv.Optional(CONF_LOAD_SHUTDOWN_TIME): select.select_schema(IP5306Select),
         cv.Optional(CONF_CHARGE_CUTOFF_VOLTAGE): select.select_schema(IP5306Select),
@@ -97,6 +99,11 @@ async def to_code(config):
         sw = await switch.new_switch(config[CONF_BOOST_CONTROL])
         cg.add(sw.set_parent(var))
         cg.add(var.set_boost_control_switch(sw))
+
+    if CONF_SOFTWARE_SHUTDOWN in config:  # Pridanie software_shutdown
+        sw = await switch.new_switch(config[CONF_SOFTWARE_SHUTDOWN])
+        cg.add(sw.set_parent(var))
+        cg.add(var.set_software_shutdown_switch(sw))
 
     # Selecty
     if CONF_LOAD_SHUTDOWN_TIME in config:

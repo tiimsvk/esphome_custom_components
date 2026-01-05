@@ -34,6 +34,7 @@ class IP5306;
 class IP5306Switch : public switch_::Switch, public Parented<IP5306> {
  public:
   void set_type(IP5306SwitchType type) { this->type_ = type; }
+  IP5306SwitchType get_type() const { return this->type_; }
   void write_state(bool state) override;
 
  private:
@@ -57,7 +58,7 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
   float get_setup_priority() const override;
 
   void set_battery_level(sensor::Sensor *sensor) { this->battery_level_ = sensor; }
-  void set_current_sensor(sensor::Sensor *current_sensor) { this->current_sensor_ = current_sensor; }
+  // void set_current_sensor(sensor::Sensor *current_sensor) { this->current_sensor_ = current_sensor; } // ODSTRANENE
   void set_load_status_sensor(text_sensor::TextSensor *sensor) { this->load_status_sensor_ = sensor; }
   void set_charger_connected(binary_sensor::BinarySensor *sensor) { this->charger_connected_ = sensor; }
   void set_charge_full(binary_sensor::BinarySensor *sensor) { this->charge_full_ = sensor; }
@@ -66,28 +67,22 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
   void set_low_load_shutdown_switch(IP5306Switch *sw) { 
       sw->set_type(IP5306_SWITCH_LOW_LOAD_SHUTDOWN);
       this->switches_.push_back(sw);
-      // Ulozime si pointery aj osobitne, pre jednoduchsi pristup v setupe
-      this->low_load_shutdown_switch_ = sw;
   }
   void set_charger_enable_switch(IP5306Switch *sw) { 
       sw->set_type(IP5306_SWITCH_CHARGER_ENABLE);
       this->switches_.push_back(sw);
-      this->charger_enable_switch_ = sw;
   }
   void set_charge_control_switch(IP5306Switch *sw) { 
       sw->set_type(IP5306_SWITCH_CHARGE_CONTROL);
       this->switches_.push_back(sw);
-      this->charge_control_switch_ = sw;
   }
   void set_boost_control_switch(IP5306Switch *sw) { 
       sw->set_type(IP5306_SWITCH_BOOST_ENABLE);
       this->switches_.push_back(sw);
-      this->boost_control_switch_ = sw;
   }
   void set_software_shutdown_switch(IP5306Switch *sw) { 
       sw->set_type(IP5306_SWITCH_SOFTWARE_SHUTDOWN);
       this->switches_.push_back(sw);
-      this->software_shutdown_switch_ = sw;
   }
 
   // Setters pre Selecty
@@ -107,36 +102,25 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
   std::vector<IP5306Select *> selects_;
   std::vector<IP5306Switch *> switches_;
 
-  // Priamy pristup k switchom pre setup
-  IP5306Switch *low_load_shutdown_switch_{nullptr};
-  IP5306Switch *charger_enable_switch_{nullptr};
-  IP5306Switch *charge_control_switch_{nullptr};
-  IP5306Switch *boost_control_switch_{nullptr};
-  IP5306Switch *software_shutdown_switch_{nullptr};
-
   void write_register_bit(uint8_t reg, uint8_t mask, bool value);
   void write_register_bits(uint8_t reg, uint8_t mask, uint8_t shift, uint8_t value);
 
  private:
   sensor::Sensor *battery_level_{nullptr};
-  sensor::Sensor *current_sensor_{nullptr};
+  // sensor::Sensor *current_sensor_{nullptr}; // ODSTRANENE
   text_sensor::TextSensor *load_status_sensor_{nullptr};
   binary_sensor::BinarySensor *charger_connected_{nullptr};
   binary_sensor::BinarySensor *charge_full_{nullptr};
 
+  // Premenne pre ukladanie stavu
   float last_battery_level_{-1};
-  float last_current_{-1};
   std::string last_load_status_{""};
   int last_charger_connected_{-1};
   int last_charge_full_{-1};
-  
-  // Debounce pre bateriu
-  float pending_battery_level_{-1};
-  int battery_debounce_counter_{0};
 
-  // Debounce pre prud
-  float pending_current_{-1};
-  int current_debounce_counter_{0};
+  // Debounce pre Bateriu
+  float pending_battery_level_{-1}; 
+  int battery_debounce_counter_{0}; 
 };
 
 }  // namespace ip5306

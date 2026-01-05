@@ -174,6 +174,7 @@ void IP5306::update() {
       }
     } else {
       ESP_LOGE(TAG, "Failed to read battery level.");
+    }  
   // Read battery voltage and publish state
   if (this->voltage_sensor_ != nullptr) {
     uint8_t data_volt[1];

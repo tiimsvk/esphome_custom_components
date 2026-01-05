@@ -21,12 +21,50 @@ static const uint8_t IP5306_REG_LEVEL = 0x78;
 void IP5306::setup() {
   ESP_LOGCONFIG(TAG, "Setting up IP5306...");
 
-  // Nacitanie pociatocnych hodnot Selectov
+  uint8_t sys0, sys1, chg0;
+  bool sys0_ok = (this->read_register(IP5306_REG_SYS_CTL0, &sys0, 1) == i2c::ERROR_OK);
+  bool sys1_ok = (this->read_register(IP5306_REG_SYS_CTL1, &sys1, 1) == i2c::ERROR_OK);
+  bool chg0_ok = (this->read_register(IP5306_REG_CHARGER_CTL0, &chg0, 1) == i2c::ERROR_OK);
+
+  // --- Nacitanie stavov Switchov (Oprava) ---
+  for (auto *sw : this->switches_) {
+      switch (sw->get_type()) {
+          case IP5306_SWITCH_LOW_LOAD_SHUTDOWN:
+              if (sys0_ok) sw->publish_state(sys0 & 0x02);
+              break;
+          case IP5306_SWITCH_CHARGER_ENABLE:
+              if (sys0_ok) sw->publish_state(sys0 & 0x10);
+              break;
+          case IP5306_SWITCH_BOOST_ENABLE:
+              if (sys0_ok) sw->publish_state(sys0 & 0x20);
+              break;
+          case IP5306_SWITCH_CHARGE_CONTROL:
+              if (chg0_ok) sw->publish_state(chg0 & 0x10);
+              break;
+          
+          case IP5306_SWITCH_LOW_BAT_SHUTDOWN:
+              if (sys1_ok) sw->publish_state(sys1 & 0x01);
+              break;
+          case IP5306_SWITCH_BOOST_ON_LOAD:
+              if (sys1_ok) sw->publish_state(sys1 & 0x04);
+              break;
+          case IP5306_SWITCH_BUTTON_SHUTDOWN:
+              if (sys1_ok) sw->publish_state(sys1 & 0x80);
+              break;
+
+          case IP5306_SWITCH_SOFTWARE_SHUTDOWN:
+              sw->publish_state(false); // Vzdy false
+              break;
+          default:
+              break;
+      }
+  }
+
+  // --- Nacitanie hodnot Selectov ---
   for (auto *sel : this->selects_) {
       uint8_t val = 0;
       int index = 0;
       bool found = false;
-      
       const auto &opts = sel->traits.get_options();
       if (opts.empty()) continue;
 
@@ -72,7 +110,6 @@ void IP5306::update() {
               this->last_charger_connected_ = connected;
           }
       }
-      
       if (this->charge_full_ != nullptr) {
           if (this->last_charge_full_ != (int)full) {
               this->charge_full_->publish_state(full);
@@ -81,13 +118,28 @@ void IP5306::update() {
       }
   }
 
-  // 2. Output Current
+  // 2. Output Current - S DEBOUNCINGOM
   if (this->current_sensor_ != nullptr) {
     if (this->read_register(IP5306_REG_READ1, &read1_data, 1) == i2c::ERROR_OK) {
-        float current = (float)read1_data * 0.02f;
-        if (std::abs(current - this->last_current_) > 0.001f) {
-            this->current_sensor_->publish_state(current);
-            this->last_current_ = current;
+        float raw_current = (float)read1_data * 0.02f;
+        
+        // Ak je zmena mensia ako 0.01A povazujeme to za sum a ignorujeme (ak nejde o uplnu nulu)
+        if (std::abs(raw_current - this->pending_current_) < 0.005) {
+             this->current_debounce_counter_++;
+        } else {
+             // Vyrazna zmena, resetujeme counter
+             this->pending_current_ = raw_current;
+             this->current_debounce_counter_ = 0;
+        }
+
+        // Pockame 20 cyklov kym potvrdime hodnotu
+        if (this->current_debounce_counter_ >= 20) {
+            // Posleme iba ak sa lisi od poslednej odoslanej
+            if (std::abs(raw_current - this->last_current_) > 0.001) {
+                this->current_sensor_->publish_state(raw_current);
+                this->last_current_ = raw_current;
+            }
+            this->current_debounce_counter_ = 0;
         }
     }
   }
@@ -105,7 +157,7 @@ void IP5306::update() {
       }
   }
 
-  // 4. Battery Level - S DEBOUNCINGOM PROTI KMITANIU
+  // 4. Battery Level - ZVYSENY DEBOUNCE (30 cyklov)
   if (this->battery_level_ != nullptr) {
     if (this->read_register(IP5306_REG_LEVEL, &read_level, 1) == i2c::ERROR_OK) {
       float raw_value = 0;
@@ -117,26 +169,21 @@ void IP5306::update() {
         default: raw_value = 0; break;
       }
 
-      // Ak je hodnota rovnaka ako posledne odoslana, resetujeme counter (nic sa nedeje)
       if (raw_value == this->last_battery_level_) {
            this->battery_debounce_counter_ = 0;
-      } 
-      // Ak je hodnota ina ako odoslana, zacneme pocitat
-      else {
+      } else {
           if (raw_value == this->pending_battery_level_) {
-              // Ak je hodnota stabilna (rovnaka ako v minulom cykle), zvysime counter
               this->battery_debounce_counter_++;
           } else {
-              // Ak sa hodnota zmenila (napriklad skocilo z 50 na 75 a hned na 25), resetujeme counter
               this->pending_battery_level_ = raw_value;
               this->battery_debounce_counter_ = 0;
           }
 
-          // Ak sa hodnota udrzala stabilna po dobu X cyklov (napr. 10), odosleme ju
-          if (this->battery_debounce_counter_ >= 10) {
+          // Zvysene na 30 cyklov pre vacsiu stabilitu
+          if (this->battery_debounce_counter_ >= 30) {
               this->battery_level_->publish_state(raw_value);
               this->last_battery_level_ = raw_value;
-              this->battery_debounce_counter_ = 0; // Reset po odoslani
+              this->battery_debounce_counter_ = 0;
           }
       }
     }

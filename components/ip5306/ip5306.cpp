@@ -122,21 +122,22 @@ void IP5306::setup() {
 }
 
 void IP5306::update() {
-  uint8_t data[2];
-  if (this->read_register(IP5306_REG_READ0, data, 1) == i2c::ERROR_OK) {
+  uint8_t data_status[1];
+  if (this->read_register(IP5306_REG_READ0, data_status, 1) == i2c::ERROR_OK) {
     if (this->charger_connected_ != nullptr) {
-      this->charger_connected_->publish_state(data[0] & 0x08);
+      this->charger_connected_->publish_state(data_status[0] & 0x08);
     }
 
     if (this->charge_full_ != nullptr) {
-      this->charge_full_->publish_state(data[0] & 0x10);
+      this->charge_full_->publish_state(data_status[0] & 0x10);
+    }
+  }
 
-  uint8_t data[1];
-  
+  uint8_t data_battery[1];
   if (this->battery_level_ != nullptr) {
-    if (this->read_register(IP5306_REG_LEVEL, data, 1) == i2c::ERROR_OK) {
+    if (this->read_register(IP5306_REG_LEVEL, data_battery, 1) == i2c::ERROR_OK) {
       float value = 0;
-      switch (data[0] & 0xF0) {
+      switch (data_battery[0] & 0xF0) {
         case 0xE0:
           value = 25;
           break;
@@ -151,6 +152,7 @@ void IP5306::update() {
           break;
         default:
           value = 0;
+          ESP_LOGW(TAG, "Unknown battery level value: 0x%02X", data_battery[0]);
       }
       this->battery_level_->publish_state(value);
     } else {

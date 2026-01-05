@@ -188,7 +188,7 @@ void IP5306::update() {
 
       // Publikuj iba v prípade, že sa hodnota zmenila
       if (this->last_battery_level_ != value) {
-        ESP_LOGI(TAG, "Battery level changed: %.0f%% (was %.0f%%)", value, this->last_battery_level_);
+        ESP_LOGD(TAG, "Battery level changed: %.0f%% (was %.0f%%)", value, this->last_battery_level_);
         this->last_battery_level_ = value;
         this->battery_level_->publish_state(value);
       }
@@ -259,13 +259,52 @@ void IP5306Select::control(const std::string &value) {
     return;
   }
 
-  uint8_t val = atoi(value.c_str());
+  uint8_t val = 0;
 
   if (this->type_ == IP5306_SELECT_LOAD_SHUTDOWN_TIME) {
+    // Map string option to register value
+    if (value == "8s") {
+      val = 0x00;
+    } else if (value == "32s") {
+      val = 0x01;
+    } else if (value == "16s") {
+      val = 0x02;
+    } else if (value == "64s") {
+      val = 0x03;
+    } else {
+      ESP_LOGE(TAG, "Invalid load shutdown time value: %s", value.c_str());
+      return;
+    }
     this->parent_->write_register_bits(IP5306_REG_SYS_CTL2, 0x0C, 2, val);
   } else if (this->type_ == IP5306_SELECT_CHARGE_CUTOFF_VOLTAGE) {
+    // Map string option to register value
+    if (value == "4.2V") {
+      val = 0x00;
+    } else if (value == "4.3V") {
+      val = 0x01;
+    } else if (value == "4.35V") {
+      val = 0x02;
+    } else if (value == "4.4V") {
+      val = 0x03;
+    } else {
+      ESP_LOGE(TAG, "Invalid charge cutoff voltage value: %s", value.c_str());
+      return;
+    }
     this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL1, 0x03, 0, val);
   } else if (this->type_ == IP5306_SELECT_CHARGE_TERMINATION_CURRENT) {
+    // Map string option to register value
+    if (value == "200mA") {
+      val = 0x00;
+    } else if (value == "400mA") {
+      val = 0x01;
+    } else if (value == "500mA") {
+      val = 0x02;
+    } else if (value == "600mA") {
+      val = 0x03;
+    } else {
+      ESP_LOGE(TAG, "Invalid charge termination current value: %s", value.c_str());
+      return;
+    }
     this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL2, 0x0C, 2, val);
   }
   this->publish_state(value);

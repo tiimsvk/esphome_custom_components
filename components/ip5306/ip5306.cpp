@@ -201,6 +201,7 @@ void IP5306::write_register_bits(uint8_t reg, uint8_t mask, uint8_t shift, uint8
 }
 
 void IP5306Switch::write_state(bool state) {
+  ESP_LOGD(TAG, "Parent is %snull for %s.", this->parent_ == nullptr ? "" : "not ", this->get_name().c_str());
   if (this->parent_ == nullptr) {
     ESP_LOGE(TAG, "Parent is null for switch component!");
     return;
@@ -221,6 +222,7 @@ void IP5306Switch::write_state(bool state) {
 }
 
 void IP5306Select::control(const std::string &value) {
+  ESP_LOGD(TAG, "Parent is %snull for %s.", this->parent_ == nullptr ? "" : "not ", this->get_name().c_str());
   if (this->parent_ == nullptr) {
     ESP_LOGE(TAG, "Parent is null for select component!");
     return;

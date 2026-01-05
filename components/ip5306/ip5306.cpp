@@ -10,11 +10,11 @@ static const char *const TAG = "ip5306";
 static const uint8_t IP5306_REG_SYS_CTL0 = 0x00;
 static const uint8_t IP5306_REG_SYS_CTL1 = 0x01;
 static const uint8_t IP5306_REG_SYS_CTL2 = 0x02;
-static const uint8_t IP5306_REG_CHARGER_CTL0 = 0x20;
-static const uint8_t IP5306_REG_CHARGER_CTL1 = 0x21;
-static const uint8_t IP5306_REG_CHARGER_CTL2 = 0x22;
-// NOVY REGISTER PODLA TVOJHO DATASHEETU PRE PRUD (0x24)
-static const uint8_t IP5306_REG_CHG_DIG_CTL0 = 0x24; 
+
+static const uint8_t IP5306_REG_CHARGER_CTL0 = 0x20; // Fine tune voltage
+static const uint8_t IP5306_REG_CHARGER_CTL1 = 0x21; // Termination Current (bity 7:6)
+static const uint8_t IP5306_REG_CHARGER_CTL2 = 0x22; // Battery Voltage (bity 3:2)
+static const uint8_t IP5306_REG_CHG_DIG_CTL0 = 0x24; // Max Current (bity 4:0)
 
 static const uint8_t IP5306_REG_READ0 = 0x70;
 static const uint8_t IP5306_REG_READ1 = 0x71; 
@@ -32,13 +32,17 @@ void IP5306::setup() {
   // 2. Charger Enable ON (Reg 0x00, Bit 4)
   this->write_register_bit(IP5306_REG_SYS_CTL0, 0x10, true);
 
-  // 3. Charge Control ON (Reg 0x20, Bit 4)
+  // 3. Charge Control ON (Reg 0x20, Bit 4 - podla tvojho popisu 0x20 bit 4)
+  // Pozor: v tvojej poslednej tabulke pri 0x20 bit 4 nie je explicitne popisany ako enable,
+  // ale v predoslych verziach bol. Ak ti to funguje, nechame to.
+  // Podla tvojej tabulky 0x20 bit 4 nie je spominany (reserved?), ale bit 1:0 je napatie.
+  // Ale v standardnom IP5306 je 0x20 bit 4 casto "Charger Loop Enable" alebo podobne.
+  // Necham to zapnute pre istotu.
   this->write_register_bit(IP5306_REG_CHARGER_CTL0, 0x10, true);
 
-  // 4. MAX CHARGE CURRENT na 0.25A (Reg 0x24, Bity 0-4)
-  // Index 2 zodpoveda 0.25A (0.05 + 2*0.1)
-  // Maska 0x1F (0001 1111)
-  ESP_LOGD(TAG, "Setting default Max Charge Current to 0.25A (Reg 0x24)...");
+  // 4. Default Max Charge Current = 0.25A
+  // Register 0x24. Vzorec 0.05 + (N * 0.1). Pre 0.25A je N=2.
+  // 2 dec = 00010 bin.
   this->write_register_bits(IP5306_REG_CHG_DIG_CTL0, 0x1F, 0, 2);
 
 
@@ -86,26 +90,25 @@ void IP5306::setup() {
       const auto &opts = sel->traits.get_options();
       if (opts.empty()) continue;
 
-      if (opts[0] == "8s") { 
+      if (opts[0] == "8s") { // LOAD_SHUTDOWN_TIME (Reg 0x02 bity 3:2)
           if (this->read_register(IP5306_REG_SYS_CTL2, &val, 1) == i2c::ERROR_OK) {
             index = (val >> 2) & 0x03;
             found = true;
           }
       } 
-      else if (opts[0] == "4.2V") { 
-           if (this->read_register(IP5306_REG_CHARGER_CTL1, &val, 1) == i2c::ERROR_OK) {
-             index = val & 0x03;
-             found = true;
-           }
-      }
-      else if (opts[0] == "200mA") { 
+      else if (opts[0] == "4.2V") { // CHARGE_CUTOFF_VOLTAGE (OPRAVA: Reg 0x22 bity 3:2)
            if (this->read_register(IP5306_REG_CHARGER_CTL2, &val, 1) == i2c::ERROR_OK) {
-             index = (val >> 2) & 0x03;
+             index = (val >> 2) & 0x03; 
              found = true;
            }
       }
-      else if (opts[0] == "0.05A") { // MAX_CHARGE_CURRENT
-           // Cita sa z 0x24 (IP5306_REG_CHG_DIG_CTL0), Bity 0-4
+      else if (opts[0] == "200mA") { // CHARGE_TERMINATION_CURRENT (OPRAVA: Reg 0x21 bity 7:6)
+           if (this->read_register(IP5306_REG_CHARGER_CTL1, &val, 1) == i2c::ERROR_OK) {
+             index = (val >> 6) & 0x03; 
+             found = true;
+           }
+      }
+      else if (opts[0] == "0.05A") { // MAX_CHARGE_CURRENT (Reg 0x24 bity 4:0)
            if (this->read_register(IP5306_REG_CHG_DIG_CTL0, &val, 1) == i2c::ERROR_OK) {
              index = val & 0x1F; 
              found = true;
@@ -144,7 +147,6 @@ void IP5306::update() {
               this->last_charger_connected_ = connected;
           }
       }
-      
       if (this->charge_full_ != nullptr) {
           if (this->last_charge_full_ != (int)full) {
               this->charge_full_->publish_state(full);
@@ -166,7 +168,7 @@ void IP5306::update() {
       }
   }
 
-  // 3. Battery Level - DEBOUNCE
+  // 3. Battery Level
   if (this->battery_level_ != nullptr) {
     if (this->read_register(IP5306_REG_LEVEL, &read_level, 1) == i2c::ERROR_OK) {
       float raw_value = 0;
@@ -253,14 +255,19 @@ void IP5306Select::control(const std::string &value) {
     case IP5306_SELECT_LOAD_SHUTDOWN_TIME:
        this->parent_->write_register_bits(IP5306_REG_SYS_CTL2, 0x0C, 2, index);
        break;
+    
     case IP5306_SELECT_CHARGE_CUTOFF_VOLTAGE:
-       this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL1, 0x03, 0, index);
-       break;
-    case IP5306_SELECT_CHARGE_TERMINATION_CURRENT:
+       // OPRAVA: Reg 0x22 (CHARGER_CTL2), Bity 3:2, Maska 0x0C
        this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL2, 0x0C, 2, index);
        break;
+       
+    case IP5306_SELECT_CHARGE_TERMINATION_CURRENT:
+       // OPRAVA: Reg 0x21 (CHARGER_CTL1), Bity 7:6, Maska 0xC0
+       this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL1, 0xC0, 6, index);
+       break;
+       
     case IP5306_SELECT_MAX_CHARGE_CURRENT: 
-       // Zapisujeme do 0x24 (IP5306_REG_CHG_DIG_CTL0), Bity 0-4
+       // Register 0x24 (CHG_DIG_CTL0), Bity 4:0, Maska 0x1F
        this->parent_->write_register_bits(IP5306_REG_CHG_DIG_CTL0, 0x1F, 0, index);
        break;
   }

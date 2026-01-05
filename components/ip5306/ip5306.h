@@ -78,6 +78,8 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
     this->charge_termination_current_select_ = charge_termination_current;
   }
 
+  void shutdown();
+
   void write_register_bit(uint8_t reg, uint8_t mask, bool value);
   void write_register_bits(uint8_t reg, uint8_t mask, uint8_t shift, uint8_t value);
 

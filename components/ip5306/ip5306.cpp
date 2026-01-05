@@ -42,6 +42,7 @@ void IP5306::setup() {
 
     uint8_t value;
     this->read_register(IP5306_REG_SYS_CTL2, &value, 1);
+    // Map value to string options
     std::string option;
     switch ((value >> 2) & 0x03) {
       case 0x00:
@@ -69,6 +70,7 @@ void IP5306::setup() {
 
     uint8_t value;
     this->read_register(IP5306_REG_CHARGER_CTL1, &value, 1);
+    // Map value to string options
     std::string option;
     switch (value & 0x03) {
       case 0x00:
@@ -96,6 +98,7 @@ void IP5306::setup() {
 
     uint8_t value;
     this->read_register(IP5306_REG_CHARGER_CTL2, &value, 1);
+    // Map value to string options
     std::string option;
     switch ((value >> 2) & 0x03) {
       case 0x00:
@@ -119,6 +122,15 @@ void IP5306::setup() {
 }
 
 void IP5306::update() {
+  uint8_t data[2];
+  if (this->read_register(IP5306_REG_READ0, data, 1) == i2c::ERROR_OK) {
+    if (this->charger_connected_ != nullptr) {
+      this->charger_connected_->publish_state(data[0] & 0x08);
+    }
+
+    if (this->charge_full_ != nullptr) {
+      this->charge_full_->publish_state(data[0] & 0x10);
+
   uint8_t data[1];
   
   if (this->battery_level_ != nullptr) {
@@ -146,3 +158,57 @@ void IP5306::update() {
     }
   }
 }
+
+void IP5306::write_register_bit(uint8_t reg, uint8_t mask, bool value) {
+  uint8_t current;
+  this->read_register(reg, &current, 1);
+
+  if (value) {
+    current |= mask;
+  } else {
+    current &= ~mask;
+  }
+
+  this->write_register(reg, &current, 1);
+}
+
+void IP5306::write_register_bits(uint8_t reg, uint8_t mask, uint8_t shift, uint8_t value) {
+  uint8_t current;
+  this->read_register(reg, &current, 1);
+
+  current &= ~mask;            // Clear target bits
+  current |= (value << shift); // Set new value
+
+  this->write_register(reg, &current, 1);
+}
+
+void IP5306Switch::write_state(bool state) {
+  if (this->type_ == IP5306_SWITCH_LOW_LOAD_SHUTDOWN) {
+    this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x02, state);
+  } else if (this->type_ == IP5306_SWITCH_CHARGER_ENABLE) {
+    this->parent_->write_register_bit(IP5306_REG_SYS_CTL0, 0x10, state);
+  } else if (this->type_ == IP5306_SWITCH_CHARGE_CONTROL) {
+    this->parent_->write_register_bit(IP5306_REG_CHARGER_CTL0, 0x10, state);
+  }
+  this->publish_state(state);
+}
+
+void IP5306Select::control(const std::string &value) {
+  uint8_t val = atoi(value.c_str());
+
+  if (this->type_ == IP5306_SELECT_LOAD_SHUTDOWN_TIME) {
+    this->parent_->write_register_bits(IP5306_REG_SYS_CTL2, 0x0C, 2, val);
+  } else if (this->type_ == IP5306_SELECT_CHARGE_CUTOFF_VOLTAGE) {
+    this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL1, 0x03, 0, val);
+  } else if (this->type_ == IP5306_SELECT_CHARGE_TERMINATION_CURRENT) {
+    this->parent_->write_register_bits(IP5306_REG_CHARGER_CTL2, 0x0C, 2, val);
+  }
+  this->publish_state(value);
+}
+
+float IP5306::get_setup_priority() const {
+  return setup_priority::HARDWARE;  // Nastavte prioritu na "HARDWARE" pre hardvérové komponenty
+}
+
+}  // namespace ip5306
+}  // namespace esphome

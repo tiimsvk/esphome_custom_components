@@ -119,5 +119,9 @@ void IP5306Select::control(const std::string &value) {
   this->publish_state(value);
 }
 
+float IP5306::get_setup_priority() const {
+  return setup_priority::HARDWARE;  // Nastavte prioritu na "HARDWARE" pre hardvérové komponenty
+}
+
 }  // namespace ip5306
 }  // namespace esphome

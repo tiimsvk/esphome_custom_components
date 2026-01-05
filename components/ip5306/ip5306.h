@@ -7,6 +7,7 @@
 #include "esphome/components/i2c/i2c.h"
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/select/select.h"
+#include <vector>
 
 namespace esphome {
 namespace ip5306 {
@@ -19,7 +20,6 @@ enum IP5306SwitchType {
   IP5306_SWITCH_SOFTWARE_SHUTDOWN,
   IP5306_SWITCH_LOW_BAT_SHUTDOWN, 
   IP5306_SWITCH_BOOST_ON_LOAD,
-  IP5306_SWITCH_SHORT_PRESS_BOOST,
   IP5306_SWITCH_BUTTON_SHUTDOWN
 };
 
@@ -34,6 +34,7 @@ class IP5306;
 class IP5306Switch : public switch_::Switch, public Parented<IP5306> {
  public:
   void set_type(IP5306SwitchType type) { this->type_ = type; }
+  IP5306SwitchType get_type() const { return this->type_; } // Pridane pre identifikaciu
   void write_state(bool state) override;
 
  private:
@@ -62,7 +63,7 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
   void set_charger_connected(binary_sensor::BinarySensor *sensor) { this->charger_connected_ = sensor; }
   void set_charge_full(binary_sensor::BinarySensor *sensor) { this->charge_full_ = sensor; }
 
-  // Settery pre switche
+  // Setters pre Switche
   void set_low_load_shutdown_switch(IP5306Switch *sw) { 
       sw->set_type(IP5306_SWITCH_LOW_LOAD_SHUTDOWN);
       this->switches_.push_back(sw);
@@ -84,7 +85,7 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
       this->switches_.push_back(sw);
   }
 
-  // Settery pre selecty
+  // Setters pre Selecty
   void set_load_shutdown_time_select(IP5306Select *sel) {
     sel->set_type(IP5306_SELECT_LOAD_SHUTDOWN_TIME);
     this->selects_.push_back(sel);
@@ -97,6 +98,9 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
     sel->set_type(IP5306_SELECT_CHARGE_TERMINATION_CURRENT);
     this->selects_.push_back(sel);
   }
+  
+  std::vector<IP5306Select *> selects_;
+  std::vector<IP5306Switch *> switches_;
 
   void write_register_bit(uint8_t reg, uint8_t mask, bool value);
   void write_register_bits(uint8_t reg, uint8_t mask, uint8_t shift, uint8_t value);
@@ -108,19 +112,20 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
   binary_sensor::BinarySensor *charger_connected_{nullptr};
   binary_sensor::BinarySensor *charge_full_{nullptr};
 
-  std::vector<IP5306Switch *> switches_;
-  std::vector<IP5306Select *> selects_;
-
-  // Premenne pre ukladanie stavu (Spam fix)
+  // Premenne pre ukladanie stavu
   float last_battery_level_{-1};
   float last_current_{-1};
   std::string last_load_status_{""};
-  int last_charger_connected_{-1}; 
+  int last_charger_connected_{-1};
   int last_charge_full_{-1};
-  
-  // --- NOVE: Debounce pre bateriu ---
-  float pending_battery_level_{-1}; // Hodnota, ktora caka na potvrdenie
-  int battery_debounce_counter_{0}; // Pocitadlo opakovani
+
+  // Debounce pre Bateriu
+  float pending_battery_level_{-1}; 
+  int battery_debounce_counter_{0}; 
+
+  // Debounce pre Prud
+  float pending_current_{-1};
+  int current_debounce_counter_{0};
 };
 
 }  // namespace ip5306

@@ -85,6 +85,7 @@ class IP5306 : public PollingComponent, public i2c::I2CDevice {
   IP5306Select *load_shutdown_time_select_{nullptr};
   IP5306Select *charge_cutoff_voltage_select_{nullptr};
   IP5306Select *charge_termination_current_select_{nullptr};
+  float last_battery_level_{-1};
 };
 
 }  // namespace ip5306

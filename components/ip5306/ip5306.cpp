@@ -60,15 +60,10 @@ void IP5306::update() {
   uint8_t read2_data;
   uint8_t read_level;
 
-  // --- TU JE TA ZMENA PODLA TVOJEJ TABULKY ---
-  // Citame naraz 2 bajty od 0x70 (cize 0x70 a 0x71)
+  // 1. Charger Status
   uint8_t status_data[2];
   if (this->read_register(IP5306_REG_READ0, status_data, 2) == i2c::ERROR_OK) {
-      
-      // Register 0x70, Bit 3 (maska 0x08) -> Charger Connected (Charging Enabled)
       bool connected = status_data[0] & 0x08; 
-      
-      // Register 0x71, Bit 3 (maska 0x08) -> Charge Full
       bool full = status_data[1] & 0x08;      
       
       if (this->charger_connected_ != nullptr) {
@@ -86,7 +81,7 @@ void IP5306::update() {
       }
   }
 
-  // Output Current
+  // 2. Output Current
   if (this->current_sensor_ != nullptr) {
     if (this->read_register(IP5306_REG_READ1, &read1_data, 1) == i2c::ERROR_OK) {
         float current = (float)read1_data * 0.02f;
@@ -97,7 +92,7 @@ void IP5306::update() {
     }
   }
 
-  // Load Status
+  // 3. Load Status
   if (this->load_status_sensor_ != nullptr) {
       if (this->read_register(IP5306_REG_READ2, &read2_data, 1) == i2c::ERROR_OK) {
           bool light_load_bit = (read2_data >> 2) & 0x01;
@@ -110,21 +105,39 @@ void IP5306::update() {
       }
   }
 
-  // Battery Level
+  // 4. Battery Level - S DEBOUNCINGOM PROTI KMITANIU
   if (this->battery_level_ != nullptr) {
     if (this->read_register(IP5306_REG_LEVEL, &read_level, 1) == i2c::ERROR_OK) {
-      float value = 0;
+      float raw_value = 0;
       switch (read_level & 0xF0) {
-        case 0xE0: value = 25; break;
-        case 0xC0: value = 50; break;
-        case 0x80: value = 75; break;
-        case 0x00: value = 100; break;
-        default: value = 0; break;
+        case 0xE0: raw_value = 25; break;
+        case 0xC0: raw_value = 50; break;
+        case 0x80: raw_value = 75; break;
+        case 0x00: raw_value = 100; break;
+        default: raw_value = 0; break;
       }
 
-      if (this->last_battery_level_ != value) {
-        this->last_battery_level_ = value;
-        this->battery_level_->publish_state(value);
+      // Ak je hodnota rovnaka ako posledne odoslana, resetujeme counter (nic sa nedeje)
+      if (raw_value == this->last_battery_level_) {
+           this->battery_debounce_counter_ = 0;
+      } 
+      // Ak je hodnota ina ako odoslana, zacneme pocitat
+      else {
+          if (raw_value == this->pending_battery_level_) {
+              // Ak je hodnota stabilna (rovnaka ako v minulom cykle), zvysime counter
+              this->battery_debounce_counter_++;
+          } else {
+              // Ak sa hodnota zmenila (napriklad skocilo z 50 na 75 a hned na 25), resetujeme counter
+              this->pending_battery_level_ = raw_value;
+              this->battery_debounce_counter_ = 0;
+          }
+
+          // Ak sa hodnota udrzala stabilna po dobu X cyklov (napr. 10), odosleme ju
+          if (this->battery_debounce_counter_ >= 10) {
+              this->battery_level_->publish_state(raw_value);
+              this->last_battery_level_ = raw_value;
+              this->battery_debounce_counter_ = 0; // Reset po odoslani
+          }
       }
     }
   }

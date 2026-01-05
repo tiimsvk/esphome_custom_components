@@ -18,7 +18,6 @@ enum IP5306SwitchType {
 enum IP5306SelectType {
   IP5306_SELECT_LIGHT_LOAD_SHUTDOWN_TIME,
   IP5306_SELECT_CHARGE_CUTOFF_VOLTAGE,
-  IP5306_SELECT_CHARGE_CURRENT,
   IP5306_SELECT_CHARGE_TERMINATION_CURRENT,
 };
 
@@ -26,14 +25,18 @@ class IP5306;
 
 class IP5306Switch : public switch_::Switch, public Parented<IP5306> {
  public:
-  IP5306SwitchType type;
   void write_state(bool state) override;
+  void set_type(IP5306SwitchType type) { this->type_ = type; }
+ private:
+  IP5306SwitchType type_;
 };
 
 class IP5306Select : public select::Select, public Parented<IP5306> {
  public:
-  IP5306SelectType type;
   void control(const std::string &value) override;
+  void set_type(IP5306SelectType type) { this->type_ = type; }
+ private:
+  IP5306SelectType type_;
 };
 
 class IP5306 : public i2c::I2CDevice, public PollingComponent {
@@ -48,31 +51,22 @@ class IP5306 : public i2c::I2CDevice, public PollingComponent {
   void set_charger_connected(binary_sensor::BinarySensor *sensor) { this->charger_connected_ = sensor; }
   void set_charge_full(binary_sensor::BinarySensor *sensor) { this->charge_full_ = sensor; }
 
-  // Setters for new components
-  void set_switch(IP5306SwitchType type, IP5306Switch *sw) {
-    sw->set_parent(this);
-    sw->type = type;
-    this->switches_.push_back(sw);
-  }
-  void set_select(IP5306SelectType type, IP5306Select *sel) {
-    sel->set_parent(this);
-    sel->type = type;
-    this->selects_.push_back(sel);
-  }
+  void set_switch(IP5306SwitchType type, IP5306Switch *sw);
+  void set_select(IP5306SelectType type, IP5306Select *sel);
 
-  // Internal helpers
-  void update_switch(IP5306SwitchType type, bool state);
-  void update_select(IP5306SelectType type, const std::string &value);
+  void handle_switch_write(IP5306SwitchType type, bool state);
+  void handle_select_control(IP5306SelectType type, const std::string &value);
 
  protected:
   sensor::Sensor *battery_level_{nullptr};
   binary_sensor::BinarySensor *charger_connected_{nullptr};
   binary_sensor::BinarySensor *charge_full_{nullptr};
-  
+
   std::vector<IP5306Switch *> switches_;
   std::vector<IP5306Select *> selects_;
 
-  void read_initial_state_();
+  void update_register_bit_(uint8_t reg, uint8_t mask, bool value);
+  void update_register_value_(uint8_t reg, uint8_t mask, uint8_t shift, uint8_t value);
 };
 
 }  // namespace ip5306

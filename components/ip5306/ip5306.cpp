@@ -28,7 +28,11 @@ void IP5306::setup() {
     this->read_register(IP5306_REG_SYS_CTL0, &value, 1);
     this->low_load_shutdown_switch_->publish_state(value & 0x02);
   }
-
+  if (this->software_shutdown_switch_ != nullptr) {
+    uint8_t value;
+    this->read_register(IP5306_REG_SYS_CTL0, &value, 1);
+    this->software_shutdown_switch_->publish_state(value & 0x08);
+  }
   if (this->charger_enable_switch_ != nullptr) {
     uint8_t value;
     this->read_register(IP5306_REG_SYS_CTL0, &value, 1);
@@ -202,6 +206,10 @@ void IP5306::shutdown() {
   // Turn off boost and disable all outputs
   this->write_register_bit(IP5306_REG_SYS_CTL1, 0x08, false);
   ESP_LOGD(TAG, "System shutdown command sent.");
+}
+
+void IP5306::set_software_shutdown_switch(IP5306Switch *software_shutdown) {
+  this->software_shutdown_switch_ = software_shutdown;
 }
 
 void IP5306::write_register_bit(uint8_t reg, uint8_t mask, bool value) {

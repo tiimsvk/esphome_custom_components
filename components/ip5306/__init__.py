@@ -62,31 +62,35 @@ async def to_code(config):
         binary_sens = await binary_sensor.new_binary_sensor(config[CONF_CHARGE_FULL])
         cg.add(var.set_charge_full(binary_sens))  # Add connection to C++
 
-    # Add switches
-    if CONF_LOW_LOAD_SHUTDOWN in config:
-        sw = await switch.new_switch(config[CONF_LOW_LOAD_SHUTDOWN])
-        cg.add(var.set_low_load_shutdown_switch(sw))
+if CONF_LOW_LOAD_SHUTDOWN in config:
+    sw = await switch.new_switch(config[CONF_LOW_LOAD_SHUTDOWN])
+    cg.add(sw.set_parent(var))  # Nastav nadradenú triedu
+    cg.add(var.set_low_load_shutdown_switch(sw))
     
-    if CONF_CHARGER_ENABLE in config:
-        sw = await switch.new_switch(config[CONF_CHARGER_ENABLE])
-        cg.add(var.set_charger_enable_switch(sw))
+if CONF_CHARGER_ENABLE in config:
+    sw = await switch.new_switch(config[CONF_CHARGER_ENABLE])
+    cg.add(sw.set_parent(var))  # Nastav nadradenú triedu
+    cg.add(var.set_charger_enable_switch(sw))
     
-    if CONF_CHARGER_CONTROL in config:  
-        sw = await switch.new_switch(config[CONF_CHARGER_CONTROL])
-        cg.add(var.set_charge_control_switch(sw))
+if CONF_CHARGER_CONTROL in config:  
+    sw = await switch.new_switch(config[CONF_CHARGER_CONTROL])
+    cg.add(sw.set_parent(var))  # Nastav nadradenú triedu
+    cg.add(var.set_charge_control_switch(sw))
     
-    # Add selects
-    if CONF_LOAD_SHUTDOWN_TIME in config:  
-        sel = await select.new_select(config[CONF_LOAD_SHUTDOWN_TIME], options=[])
-        cg.add(sel.traits.set_options(["8s", "32s", "16s", "64s"]))
-        cg.add(var.set_load_shutdown_time_select(sel))
+if CONF_LOAD_SHUTDOWN_TIME in config:  
+    sel = await select.new_select(config[CONF_LOAD_SHUTDOWN_TIME], options=[])
+    cg.add(sel.set_parent(var))  # Nastav nadradenú triedu
+    cg.add(sel.traits.set_options(["8s", "32s", "16s", "64s"]))
+    cg.add(var.set_load_shutdown_time_select(sel))
     
-    if CONF_CHARGE_CUTOFF_VOLTAGE in config:
-        sel = await select.new_select(config[CONF_CHARGE_CUTOFF_VOLTAGE], options=[])
-        cg.add(sel.traits.set_options(["4.2V", "4.3V", "4.35V", "4.4V"]))
-        cg.add(var.set_charge_cutoff_voltage_select(sel))
+if CONF_CHARGE_CUTOFF_VOLTAGE in config:
+    sel = await select.new_select(config[CONF_CHARGE_CUTOFF_VOLTAGE], options=[])
+    cg.add(sel.set_parent(var))  # Nastav nadradenú triedu
+    cg.add(sel.traits.set_options(["4.2V", "4.3V", "4.35V", "4.4V"]))
+    cg.add(var.set_charge_cutoff_voltage_select(sel))
     
-    if CONF_CHARGE_TERMINATION_CURRENT in config:
-        sel = await select.new_select(config[CONF_CHARGE_TERMINATION_CURRENT], options=[])
-        cg.add(sel.traits.set_options(["200mA", "400mA", "500mA", "600mA"]))
-        cg.add(var.set_charge_termination_current_select(sel))
+if CONF_CHARGE_TERMINATION_CURRENT in config:
+    sel = await select.new_select(config[CONF_CHARGE_TERMINATION_CURRENT], options=[])
+    cg.add(sel.set_parent(var))  # Nastav nadradenú triedu
+    cg.add(sel.traits.set_options(["200mA", "400mA", "500mA", "600mA"]))
+    cg.add(var.set_charge_termination_current_select(sel))
